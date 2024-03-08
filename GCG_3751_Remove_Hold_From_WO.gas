@@ -1,0 +1,117 @@
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+F.ODBC.Connection!con.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+
+F.Intrinsic.Control.If(V.Caller.Hook,=,47265)
+	F.Intrinsic.Control.CallSub(RemoveHold)
+F.Intrinsic.Control.Endif
+
+F.Intrinsic.Control.CallSub(Unload)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3751_Remove_Hold_From_WO.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Main.End
+
+Program.Sub.RemoveHold.Start
+F.Intrinsic.Control.SetErrorHandler("RemoveHold_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.iRows.Declare(Long)
+V.Local.iC.Declare(Long)
+V.Local.sRow.Declare(String)
+V.Local.sPart.Declare(String)
+V.Local.sSQL.Declare(String)
+V.Local.sRet.Declare(String)
+V.Local.sMessage.Declare(String)
+V.Local.sLocation.Declare(String)
+
+'Read BDF file
+F.Intrinsic.BDF.Load("AUX001","AUX001")
+F.Intrinsic.BDF.ReadRowCount("AUX001",V.Local.iRows)
+'Subtract 1 since we start at zero to get accurate number for loop
+F.Intrinsic.Math.Sub(V.Local.iRows,1,V.Local.iRows)
+
+'For each row in the BDF, Split the string, Part is in the second location
+F.Intrinsic.Control.For(V.Local.iC,0,V.Local.iRows,1)
+	F.Intrinsic.BDF.ReadRow("AUX001",V.Local.iC,V.Local.sRow)
+	F.Intrinsic.String.Split(V.Local.sRow,"|~|",V.Local.sRow)
+	F.Intrinsic.String.GSSPartString(V.Local.sRow(1),V.Local.sRow(2),V.Local.sPart)
+	V.Local.sLocation.Set(V.Local.sRow(3))
+	'Check to see if the part has been made active
+	F.Intrinsic.String.Build("SELECT FLAG_INACTIVE FROM V_INVENTORY_MSTR WHERE PART = '{0}' and LOCATION = '{1}'",V.Local.sPart.Trim,V.Local.sLocation.Trim,V.Local.sSQL)
+	F.ODBC.Connection!con.OpenLocalRecordsetRO("rst",V.Local.sSQL) 
+	'If it is active, ask if the Jobs for that part need to be removed from on hold.
+	F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,<>,True)
+		F.Intrinsic.Control.If(V.ODBC.con!rst.FieldValTrim!FLAG_INACTIVE,<>,"Y")
+			F.Intrinsic.String.Build("DO the Work Orders for Part {0} Location {1} need to be removed from Hold?",V.Local.sPart.Trim,V.Local.sLocation.Trim,V.Local.sMessage)
+			F.Intrinsic.UI.Msgbox(V.Local.sMessage,"Remove Hold",4,V.Local.sRet)
+			'If user selects yes, remove hold flag
+			F.Intrinsic.Control.If(V.Local.sRet,=,"6")
+				F.Intrinsic.String.Build("UPDATE JOB_HEADER SET FLAG_HOLD = '' WHERE PART = '{0}' AND LOCATION = '{1}'",V.Local.sPart.Trim,V.Local.sLocation.Trim,V.Local.sSQL)
+				F.ODBC.Connection!con.Execute(V.Local.sSQL)
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Else
+			F.Intrinsic.String.Build("Flag for part {0} location {1} is still marked as inactive.",V.Local.sPart.Trim,V.Local.sLocation.Trim,V.Local.sMessage)
+			F.Intrinsic.UI.Msgbox(V.Local.sMessage)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Build("Could not find information for part: {0} location: {1}",V.Local.sPart.Trim,V.Local.sLocation,V.Local.sMessage)
+		F.Intrinsic.UI.Msgbox(V.Local.sMessage)
+	F.Intrinsic.Control.EndIf
+	
+	F.ODBC.con!rst.Close
+F.Intrinsic.Control.Next(V.Local.iC)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("RemoveHold_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3751_Remove_Hold_From_WO.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+Program.Sub.RemoveHold.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.SetErrorHandler("Unload_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+F.ODBC.Connection!con.Close
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3751_Remove_Hold_From_WO.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Unload.End
+
+Program.Sub.Comments.Start
+${$0$}$Remove Hold From WOs after ECN Process$}$BCC$}$4/8/2016 1:39:39 PM$}$False
+${$1$}$$}$$}$0$}$47265$}$POST SAVE$}$4/8/2016 4:43:52 PM$}$(Program: ENG003; Screen: ENGS03)
+
+${$3$}$0$}$$}$0$}$-1$}$$}$12:00:00 AM$}$The user will select an ECN number and allow the screen to populate.  The step for Re activate part will be set to final and Done will be checked.  Once this is done the Save button will be clicked and this is the point where the parts are Reactivated within the system.  
+
+After this is done there will be a prompt to ask the user if the work orders need to be removed from Hold.  This will be a custom prompt with either a Yes or No Selection.  
+
+If yes is selected then all Parts that have work orders will have the hold removed.
+Program.Sub.Comments.End
